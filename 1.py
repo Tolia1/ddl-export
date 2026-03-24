@@ -2,6 +2,34 @@ import os
 import yaml
 import oracledb
 
+def get_connection(db_cfg):
+    # Указываем путь к Wallet и TNS (обычно это одна папка с файлами из архива)
+    wallet_path = db_cfg.get('wallet_path')
+    
+    try:
+        if db_cfg['method'] == 'tns':
+            # Для TNS нам нужно сказать драйверу, где искать tnsnames.ora и wallet
+            conn = oracledb.connect(
+                user=db_cfg['user'],
+                password=db_cfg['password'],
+                dsn=db_cfg['tns_name'],
+                config_dir=wallet_path,     # Путь к tnsnames.ora
+                wallet_location=wallet_path, # Путь к cwallet.sso
+                wallet_password=db_cfg.get('wallet_password') # Если кошелек зашифрован
+            )
+        else:
+            # Обычное подключение через Service Name
+            dsn = f"{db_cfg['host']}:{db_cfg['port']}/{db_cfg['service_name']}"
+            conn = oracledb.connect(
+                user=db_cfg['user'], 
+                password=db_cfg['password'], 
+                dsn=dsn
+            )
+        return conn
+    except oracledb.Error as e:
+        print(f"Ошибка подключения: {e}")
+        return None
+
 def run_export():
     # 1. Загрузка конфига
     try:
@@ -18,7 +46,7 @@ def run_export():
     # 3. Подключение к Oracle
     db_cfg = config['db_conn']
     try:
-        conn = oracledb.connect(user=db_cfg['user'], password=db_cfg['password'], dsn=db_cfg['dsn'])
+        conn = get_connection(db_cfg)
         cursor = conn.cursor()
         
         # Настройка форматирования DDL
