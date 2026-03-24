@@ -1,31 +1,74 @@
-import oracledb
+import os
 import yaml
-import sys
+import oracledb
 
-def load_config(file_path):
+def run_export():
+    # 1. Загрузка конфига
     try:
-        with open(file_path, 'r') as file:
-            return yaml.safe_load(file)
+        with open("config.yaml", "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
     except FileNotFoundError:
-        print(f"Config file '{file_path}' not found")
-        sys.exit(1)
+        print("Файл config.yaml не найден!")
+        return
 
-config = load_config('config.yaml')
+    # 2. Создание корневой папки экспорта
+    base_path = config.get('export_path', '')
+    root_export_dir = os.path.join(base_path, f"ddl-export")
+    
+    # 3. Подключение к Oracle
+    db_cfg = config['db_conn']
+    try:
+        conn = oracledb.connect(user=db_cfg['user'], password=db_cfg['password'], dsn=db_cfg['dsn'])
+        cursor = conn.cursor()
+        
+        # Настройка форматирования DDL
+        # cursor.execute("begin dbms_metadata.set_transform_param(dbms_metadata.session_transform, 'SQLTERMINATOR', true); end;")
+        
+        # 4. Основной цикл по пользователям из YAML
+        for user_item in config.get('users_to_export', []):
+            owner = user_item.upper()
+            obj_types = config.get('types', [])
+            
+            print(f"--- Обработка пользователя: {owner} ---")
+            user_dir = os.path.join(root_export_dir, owner)
+            
+            for obj_type in obj_types:
+                obj_type = obj_type.upper()
+                
+                # Получаем список имен объектов этого типа для данного owner
+                cursor.execute(
+                    "SELECT object_name FROM all_objects WHERE owner = :1 AND object_type = :2",
+                    [owner, obj_type]
+                )
+                objects = cursor.fetchall()
 
-USER = config['db_user']
-PASSWORD = config['db_passwd']
-DSN = config['db_dns']
+                if objects:
+                    # Создаем папку типа (например, TABLES) только если объекты найдены
+                    type_dir = os.path.join(user_dir, obj_type)
+                    os.makedirs(type_dir, exist_ok=True)
+                    
+                    for (obj_name,) in objects:
+                        try:
+                            # Получаем DDL
+                            cursor.execute(f"SELECT dbms_metadata.get_ddl(:1, :2, :3) FROM dual", [obj_type, obj_name, owner])
+                            ddl_lob = cursor.fetchone()[0]
+                            ddl_text = ddl_lob.read() if ddl_lob else ""
 
-try: 
-    with oracledb.connect(user=USER, password=PASSWORD, dsn=DSN) as conn:
-        with conn.cursor() as cursor:
-            sql = "SELECT table_name FROM all_tables WHERE owner = 'PAYMENT'"
+                            # Сохраняем в файл
+                            file_path = os.path.join(type_dir, f"{obj_name}.sql")
+                            with open(file_path, "w", encoding="utf-8") as f:
+                                f.write(ddl_text)
+                            print(f"  [OK] {obj_type}: {obj_name}")
+                        except Exception as e:
+                            print(f"  [Ошибка] Не удалось получить DDL для {obj_name}: {e}")
+                else:
+                    print(f"  [Инфо] Объекты типа {obj_type} для {owner} не найдены.")
 
-            cursor.execute(sql)
+    except oracledb.Error as e:
+        print(f"Ошибка базы данных: {e}")
+    finally:
+        if 'conn' in locals():
+            conn.close()
 
-            print("Список таблиць:")
-            for row in cursor:
-                print(f"- {row[0]}")
-
-except oracledb.Error as e:
-    print(f"Error: {e}")
+if __name__ == "__main__":
+    run_export()
