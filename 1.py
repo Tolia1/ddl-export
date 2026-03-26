@@ -1,6 +1,19 @@
 import os
 import yaml
 import oracledb
+import sqlparse
+
+def format_plsql(raw_ddl):
+    # Приводим к единому виду: ключевые слова в верхний регистр, 
+    # фиксированные отступы в 4 пробела
+    formatted = sqlparse.format(
+        raw_ddl,
+        reindent=True,
+        keyword_case='upper',
+        indent_width=4,
+        strip_comments=False # лучше оставить для Git
+    )
+    return formatted
 
 def get_connection(db_cfg):
     # Указываем путь к Wallet и TNS (обычно это одна папка с файлами из архива)
@@ -31,9 +44,13 @@ def get_connection(db_cfg):
         return None
 
 def run_export():
-    # 1. Загрузка конфига
+    # 1. Получаем абсолютный путь к директории, где лежит текущий скрипт
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    
+    # 2. Соединяем путь к папке с именем файла конфига
+    config_path = os.path.join(script_dir, "config.yaml")
     try:
-        with open("config.yaml", "r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
     except FileNotFoundError:
         print("Файл config.yaml не найден!")
@@ -50,7 +67,7 @@ def run_export():
         cursor = conn.cursor()
         
         # Настройка форматирования DDL
-        # cursor.execute("begin dbms_metadata.set_transform_param(dbms_metadata.session_transform, 'SQLTERMINATOR', true); end;")
+        cursor.execute("begin dbms_metadata.set_transform_param(dbms_metadata.session_transform, 'SEGMENT_ATTRIBUTES', false); end;")
         
         # 4. Основной цикл по пользователям из YAML
         for user_item in config.get('users_to_export', []):
@@ -81,6 +98,7 @@ def run_export():
                             cursor.execute(f"SELECT dbms_metadata.get_ddl(:1, :2, :3) FROM dual", [obj_type, obj_name, owner])
                             ddl_lob = cursor.fetchone()[0]
                             ddl_text = ddl_lob.read() if ddl_lob else ""
+                            # clean_ddl = format_plsql(ddl_text)
 
                             # Сохраняем в файл
                             file_path = os.path.join(type_dir, f"{obj_name}.sql")
