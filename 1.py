@@ -57,8 +57,7 @@ def run_export():
         return
 
     # 2. Создание корневой папки экспорта
-    base_path = config.get('export_path', '')
-    root_export_dir = os.path.join(base_path, f"ddl-export")
+    root_export_dir = config.get('export_path', '')
     
     # 3. Подключение к Oracle
     db_cfg = config['db_conn']
