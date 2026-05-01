@@ -1,0 +1,28 @@
+types:
+  - table
+  - view
+  - PROCEDURE
+#  - "DATABASE LINK"
+  - DIRECTORY
+  - FUNCTION
+  - PACKAGE
+  - SEQUENCE
+  - type
+
+users_to_export:
+  - catalog
+  - app
+  - name
+  - song
+  - user
+  - band
+
+export_path: "/home/july/Documents/rehearsal_bot_sql_2"
+
+db_conn:
+  method: tns
+  user: user
+  password: password 
+
+  wallet_path: /opt/oracle/wallet
+  tns_name: name
