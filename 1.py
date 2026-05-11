@@ -65,6 +65,7 @@ def run_export():
             
             for obj_type in obj_types:
                 obj_type = obj_type.upper()
+                metadata_type = 'PROCOBJ' if obj_type == 'JOB' else obj_type
                 
                 # Получаем список имен объектов этого типа для данного owner
                 cursor.execute(
@@ -81,7 +82,7 @@ def run_export():
                     for (obj_name,) in objects:
                         try:
                             # Получаем DDL
-                            cursor.execute(f"SELECT dbms_metadata.get_ddl(:1, :2, :3) FROM dual", [obj_type, obj_name, owner])
+                            cursor.execute(f"SELECT dbms_metadata.get_ddl(:1, :2, :3) FROM dual", [metadata_type, obj_name, owner])
                             ddl_lob = cursor.fetchone()[0]
                             ddl_text = ddl_lob.read() if ddl_lob else ""
 
